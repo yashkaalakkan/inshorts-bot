@@ -1,0 +1,56 @@
+name: Inshorts Auto-Post
+
+on:
+  schedule:
+    - cron: "17 1,5,9,13,17,21 * * *"
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install system deps (FFmpeg + Fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcaca0
+          sudo apt-get install -y ffmpeg fonts-noto
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Restore posted history
+        uses: actions/cache@v4
+        with:
+          path: posted_history.json
+          key: posted-history-${{ github.run_id }}
+          restore-keys: posted-history-
+
+      - name: Run bot
+        env:
+          YT_CLIENT_ID:      ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET:  ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN:  ${{ secrets.YT_REFRESH_TOKEN }}
+          NEWS_API_KEY:      ${{ secrets.NEWS_API_KEY }}
+        run: python main.py
+
+      - name: Save posted history
+        uses: actions/cache@v4
+        with:
+          path: posted_history.json
+          key: posted-history-${{ github.run_id }}
