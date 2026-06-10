@@ -158,6 +158,25 @@ def _font(size, bold=False, serif=False):
         if p.exists(): return ImageFont.truetype(str(p),size)
     return ImageFont.load_default()
 
+def _latin_font(size, bold=False):
+    """Font guaranteed to have Latin glyphs — used for all English-only text
+    (channel name, handle, SUBSCRIBE, badge labels, CTA, MIN badges etc.)."""
+    cands = [
+        FONT_DIR/("NotoSans-Bold.ttf"   if bold else "NotoSans-Regular.ttf"),
+        FONT_DIR/("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"),
+        Path("/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf" if bold
+             else "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
+             else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold
+             else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
+        Path("/usr/share/fonts/truetype/freefont/FreeSansBold.ttf" if bold
+             else "/usr/share/fonts/truetype/freefont/FreeSans.ttf"),
+    ]
+    for p in cands:
+        if p.exists(): return ImageFont.truetype(str(p), size)
+    return ImageFont.load_default()
+
 def _fit_font(text_lines, max_w, max_size=72, min_size=36, bold=True, serif=True):
     for size in range(max_size, min_size-1, -2):
         f = _font(size, bold=bold, serif=serif)
@@ -335,7 +354,7 @@ def _build_hook_frame(t, full_bleed, hook_text, accent, particles):
         ar, ag, ab = accent
         bright = (min(255,ar+100), min(255,ag+100), min(255,ab+100))
         hook_font_big = _font(90, bold=True, serif=False)
-        hook_font_sub = _font(54, bold=False, serif=True)
+        hook_font_sub = _latin_font(54, bold=False)   # FIX: "Tap for full story" is English
         lines = textwrap.wrap(hook_text, width=16)[:3]  # No .upper() for Devanagari
         dummy = Image.new("RGB",(1,1))
         dd = ImageDraw.Draw(dummy)
@@ -388,32 +407,8 @@ def _extract_stat(title):
     return None
 
 def _draw_stat_callout(frame, cx0, y, inner_w, stat_text, accent, t, alpha):
-    if not stat_text or alpha < 10:
-        return y
-    draw = ImageDraw.Draw(frame)
-    ar, ag, ab = accent
-    stat_font  = _font(80, bold=True, serif=False)   # FIX: was 120 — too tall, ate into title space
-    dummy = Image.new("RGB",(1,1))
-    dd = ImageDraw.Draw(dummy)
-    sb = dd.textbbox((0,0), stat_text, font=stat_font)
-    sw = sb[2]-sb[0]; sh = sb[3]-sb[1]
-    box_pad = 18                                      # FIX: was 24 — tighter padding
-    box_w = min(sw + box_pad*2, inner_w)
-    box_h = sh + box_pad*2 + 4                        # FIX: was +8
-    bx0 = cx0 + (inner_w - box_w) // 2               # FIX: removed erroneous +40 offset
-    bx1 = bx0 + box_w
-    by0 = y; by1 = y + box_h
-    layer = Image.new("RGBA", (W, H), (0,0,0,0))
-    ld = ImageDraw.Draw(layer)
-    safe_rounded_rect(ld, [bx0,by0,bx1,by1], 16, fill=(ar,ag,ab, int(200*alpha/255)))
-    safe_rounded_rect(ld, [bx0,by0,bx1,by0+box_h//2], 16, fill=(255,255,255, int(30*alpha/255)))
-    frame.alpha_composite(layer)
-    draw = ImageDraw.Draw(frame)
-    tx = bx0 + box_pad + (box_w - box_pad*2 - sw)//2
-    ty = by0 + box_pad
-    draw.text((tx+3,ty+3), stat_text, font=stat_font, fill=(0,0,0,int(100*alpha/255)))
-    draw.text((tx,ty), stat_text, font=stat_font, fill=(255,255,255,alpha))
-    return by1 + 18
+    # REMOVED: stat callout took up too much vertical space and displaced title lines.
+    return y
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DIAGONAL SHIMMER
@@ -671,30 +666,28 @@ def _draw_channel_banner(frame, cx0, cy0_card, cy1, cx1,
         frame.paste(lf,(logo_cx-lw2//2,logo_cy-lh2//2),lf)
         draw=ImageDraw.Draw(frame)
     else:
-        init_font=_font(34,bold=True,serif=True)
+        init_font=_latin_font(34, bold=True)
         init=CHANNEL_NAME[0].upper()
         ib=draw.textbbox((0,0),init,font=init_font)
         draw.text((logo_cx-(ib[2]-ib[0])//2,logo_cy-(ib[3]-ib[1])//2-2),
                   init,font=init_font,fill=(10,10,10,int(230*alpha/255)))
 
-    sub_font=_font(26,bold=True)
+    sub_font=_latin_font(26, bold=True)
     sub_text="SUBSCRIBE"
     sub_b=ImageDraw.Draw(frame).textbbox((0,0),sub_text,font=sub_font)
     sub_w_approx=sub_b[2]-sub_b[0]
     right_reserve=sub_w_approx+inner_pad_x+24
     text_x=logo_cx+logo_r+20
     text_max_w=bx1-text_x-right_reserve
-    name_font,_=_fit_font([CHANNEL_NAME],text_max_w,max_size=42,min_size=18,bold=True,serif=True)
-    handle_font=_font(28,bold=False,serif=False)
+    name_font,_=_fit_font([CHANNEL_NAME],text_max_w,max_size=42,min_size=18,bold=True,serif=False)
+    handle_font=_latin_font(28, bold=False)
     name_h=name_font.size+4; handle_h=handle_font.size+4
     total_h=name_h+handle_h+8
     name_y=(by0+by1)//2-total_h//2; handle_y=name_y+name_h+8
 
-    # ── FIX: pure white channel name — always visible on dark banner ──
     _draw_gradient_text(frame,(text_x,name_y),CHANNEL_NAME,name_font,
                         (255,255,255),(220,220,220),alpha=alpha)
     draw=ImageDraw.Draw(frame)
-    # ── FIX: bright handle colour — no longer dim accent-derived ──
     _draw_text_shadow(draw,(text_x,handle_y),CHANNEL_HANDLE,handle_font,
                       (210,210,210,alpha),shadow_offset=1)
 
@@ -737,7 +730,7 @@ def _draw_cta_pulse(frame, t, accent, show_after=8.0):
     if alpha < 10: return
     pulse = 0.75 + 0.25 * abs(math.sin(t * math.pi * 1.5))
     alpha = int(alpha * pulse)
-    font = _font(38, bold=True, serif=False)
+    font = _font(38, bold=True, serif=False)   # Devanagari font — handles the Hindi in this string
     text = "↑  रोज़ की ख़बरों के लिए Subscribe करें  ↑"
     dummy = Image.new("RGB",(1,1))
     dd = ImageDraw.Draw(dummy)
@@ -795,7 +788,7 @@ def _build_frame(t, bg_base, full_bleed, story, theme, particles,
     # ── Animated category badge ──
     badge_p=ease_out_elastic(clamp01(progress(t,T_BADGE_IN,0.6)))
     if badge_p>0 and y+44<max_y:
-        bf=_font(26,bold=True,serif=False)
+        bf=_latin_font(26, bold=True)           # FIX: Latin font for badge text (source, MIN, category)
         bright_acc=(min(255,ar+60),min(255,ag+60),min(255,ab+60))
         nx=_draw_animated_badge(draw,inner_x,y,category,bf,bright_acc,(10,10,10),t,badge_p)
         src_raw=(story.get("source","") or "News")
@@ -825,7 +818,7 @@ def _build_frame(t, bg_base, full_bleed, story, theme, particles,
     title_alpha=int(255*title_p)
     title_slide=int(36*(1-title_p))
     dummy_d = ImageDraw.Draw(Image.new("RGB",(1,1)))
-    for attempt_size in range(78, 24, -2):
+    for attempt_size in range(62, 24, -2):   # FIX: start smaller — 78 was too large for long Hindi titles
         title_font = _font(attempt_size, bold=True, serif=True)
         total_title_h = sum(
             dummy_d.textbbox((0,0),l,font=title_font)[3] -
