@@ -4,7 +4,7 @@ Auto-posting pipeline — 100% free tier
 Run manually or via GitHub Actions cron
 """
 
-import os, json, sys
+import os
 from core.fetcher   import fetch_stories
 from core.builder   import build_video
 from core.music     import pick_music
@@ -12,18 +12,17 @@ from core.poster    import post_youtube, post_instagram
 from core.history   import already_posted, mark_posted
 
 # ── config ────────────────────────────────────────────────────────────────────
-CATEGORIES = ["human_interest", "lifestyle_leisure", "arts_culture_entertainment", "economy_business_finance", "politics_government", "science_technolog", "society", "general"]
 MAX_PER_RUN  = 3         # videos to produce & post per run
-FETCH_OFFSET = 0         # bot 1 takes the first 3 stories
+FETCH_OFFSET = 0         # bot 1 takes the first N stories
 POST_YT      = True
 POST_IG      = False
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run():
     print("=== Inshorts Bot starting ===")
-    stories = []
-    for cat in CATEGORIES:
-        stories += fetch_stories(cat, limit=MAX_PER_RUN * 2, offset=FETCH_OFFSET)
+
+    # Single call — all Hindi news, no category restriction
+    stories = fetch_stories(limit=MAX_PER_RUN * 4, offset=FETCH_OFFSET)
 
     produced = 0
     for story in stories:
@@ -44,7 +43,10 @@ def run():
 
         if POST_YT:
             yt_id = post_youtube(story, video_path)
-            print(f"  ✓ YouTube: https://youtube.com/shorts/{yt_id}")
+            if yt_id:
+                print(f"  ✓ YouTube: https://youtube.com/shorts/{yt_id}")
+            else:
+                print(f"  ✗ YouTube upload failed (check YT_CLIENT_ID / YT_CLIENT_SECRET / YT_REFRESH_TOKEN env vars)")
         if POST_IG:
             ig_id = post_instagram(story, video_path)
             print(f"  ✓ Instagram reel posted: {ig_id}")

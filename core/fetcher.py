@@ -1,32 +1,22 @@
 """
 core/fetcher.py
 Fetches news from Currents API (free tier, 600 req/day, works from servers).
-Requires CURRENTS_API_KEY environment variable.
+Requires NEWS_API_KEY environment variable.
+
+Category is used only for internal tagging/routing — NOT sent to the API.
+We fetch all Hindi news in one call and distribute stories across categories.
 """
 
 import os, requests
 
 API_KEY = os.environ.get("NEWS_API_KEY", "")
 
-CATEGORY_MAP = {
-    "human_interest":             "human_interest",
-    "lifestyle_leisure":          "lifestyle_leisure",
-    "arts_culture_entertainment": "arts_culture_entertainment",
-    "economy_business_finance":   "economy_business_finance",
-    "politics_government":        "politics_government",
-    "science_technology":         "science_technology",
-    "society":                    "society",
-    "general":                    "general",    
-}
-
-def fetch_stories(category: str, limit: int = 10, offset: int = 0) -> list:
-    api_category = CATEGORY_MAP.get(category, category)
+def fetch_stories(category: str = "general", limit: int = 10, offset: int = 0) -> list:
     try:
         r = requests.get(
             "https://api.currentsapi.services/v1/latest-news",
             params={
-                "category": api_category,
-                "language": "hi",          # Changed: "en" → "hi" for Hindi news
+                "language": "hi",
                 "apiKey":   API_KEY,
             },
             timeout=15,
@@ -43,6 +33,10 @@ def fetch_stories(category: str, limit: int = 10, offset: int = 0) -> list:
 
             story_id = f"{abs(hash(title)):08x}"
 
+            # Use API-provided categories if available, else fall back to passed-in category
+            api_cats = a.get("category") or []
+            tag = api_cats[0] if api_cats else category
+
             stories.append({
                 "id":        story_id,
                 "title":     title,
@@ -52,12 +46,12 @@ def fetch_stories(category: str, limit: int = 10, offset: int = 0) -> list:
                 "src_url":   a.get("url", ""),
                 "img_url":   a.get("image", ""),
                 "vid_url":   None,
-                "category":  category,
+                "category":  tag,
             })
 
-        print(f"  [fetcher] {category} → {len(stories)} stories")
+        print(f"  [fetcher] hindi news → {len(stories)} stories")
         return stories
 
     except Exception as e:
-        print(f"  [fetcher] error for {category}: {e}")
+        print(f"  [fetcher] error: {e}")
         return []
