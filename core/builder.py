@@ -128,6 +128,10 @@ FALLBACK_THEMES=[
 def _font(size, bold=False, serif=False):
     if serif:
         cands=[
+            # Hindi/Devanagari-capable fonts (checked first)
+            FONT_DIR/("NotoSerifDevanagari-Bold.ttf"  if bold else "NotoSerifDevanagari-Regular.ttf"),
+            Path("/usr/share/fonts/truetype/noto/NotoSerifDevanagari-Bold.ttf" if bold
+                 else "/usr/share/fonts/truetype/noto/NotoSerifDevanagari-Regular.ttf"),
             FONT_DIR/("NotoSerif-Bold.ttf"      if bold else "NotoSerif-Regular.ttf"),
             FONT_DIR/("PlayfairDisplay-Bold.ttf" if bold else "PlayfairDisplay-Regular.ttf"),
             Path("/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf" if bold
@@ -137,6 +141,10 @@ def _font(size, bold=False, serif=False):
         ]
     else:
         cands=[
+            # Hindi/Devanagari-capable fonts (checked first)
+            FONT_DIR/("NotoSansDevanagari-Bold.ttf"  if bold else "NotoSansDevanagari-Regular.ttf"),
+            Path("/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf" if bold
+                 else "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf"),
             FONT_DIR/("NotoSans-Bold.ttf"   if bold else "NotoSans-Regular.ttf"),
             FONT_DIR/("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"),
             Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
@@ -328,7 +336,7 @@ def _build_hook_frame(t, full_bleed, hook_text, accent, particles):
         bright = (min(255,ar+100), min(255,ag+100), min(255,ab+100))
         hook_font_big = _font(90, bold=True, serif=False)
         hook_font_sub = _font(54, bold=False, serif=True)
-        lines = textwrap.wrap(hook_text.upper(), width=16)[:3]
+        lines = textwrap.wrap(hook_text, width=16)[:3]  # No .upper() for Devanagari
         dummy = Image.new("RGB",(1,1))
         dd = ImageDraw.Draw(dummy)
         total_h = sum(dd.textbbox((0,0),l,font=hook_font_big)[3] for l in lines) + 20*(len(lines)-1)
@@ -384,15 +392,15 @@ def _draw_stat_callout(frame, cx0, y, inner_w, stat_text, accent, t, alpha):
         return y
     draw = ImageDraw.Draw(frame)
     ar, ag, ab = accent
-    stat_font  = _font(120, bold=True, serif=False)
+    stat_font  = _font(80, bold=True, serif=False)   # FIX: was 120 — too tall, ate into title space
     dummy = Image.new("RGB",(1,1))
     dd = ImageDraw.Draw(dummy)
     sb = dd.textbbox((0,0), stat_text, font=stat_font)
     sw = sb[2]-sb[0]; sh = sb[3]-sb[1]
-    box_pad = 24
+    box_pad = 18                                      # FIX: was 24 — tighter padding
     box_w = min(sw + box_pad*2, inner_w)
-    box_h = sh + box_pad*2 + 8
-    bx0 = cx0 + (inner_w - box_w) // 2 + 40
+    box_h = sh + box_pad*2 + 4                        # FIX: was +8
+    bx0 = cx0 + (inner_w - box_w) // 2               # FIX: removed erroneous +40 offset
     bx1 = bx0 + box_w
     by0 = y; by1 = y + box_h
     layer = Image.new("RGBA", (W, H), (0,0,0,0))
@@ -730,7 +738,7 @@ def _draw_cta_pulse(frame, t, accent, show_after=8.0):
     pulse = 0.75 + 0.25 * abs(math.sin(t * math.pi * 1.5))
     alpha = int(alpha * pulse)
     font = _font(38, bold=True, serif=False)
-    text = "↑  Subscribe for daily news  ↑"
+    text = "↑  रोज़ की ख़बरों के लिए Subscribe करें  ↑"
     dummy = Image.new("RGB",(1,1))
     dd = ImageDraw.Draw(dummy)
     bb = dd.textbbox((0,0), text, font=font)
@@ -805,16 +813,20 @@ def _build_frame(t, bg_base, full_bleed, story, theme, particles,
     stat_alpha=int(255*stat_p)
     if stat_text and stat_alpha>5:
         y=_draw_stat_callout(frame,inner_x,y,inner_w,stat_text,accent,t,stat_alpha)
-        y+=8
+        # FIX: removed y+=8 extra padding — _draw_stat_callout already includes +18 gap
     draw=ImageDraw.Draw(frame)
 
     # ── Title — dynamic font size fits all lines vertically AND horizontally ──
+    # FIX: title_max_y reserves just enough space for divider + at least 1 body line.
+    # The old -120 guard was double-penalising (max_y already excludes the banner).
+    title_body_reserve = 28 + 52  # divider height + one body line minimum
+    title_max_y = max_y - title_body_reserve
     title_p=ease_out_cubic(clamp01(progress(t,T_TITLE_IN,0.55)))
     title_alpha=int(255*title_p)
     title_slide=int(36*(1-title_p))
-    for attempt_size in range(78, 28, -4):
+    dummy_d = ImageDraw.Draw(Image.new("RGB",(1,1)))
+    for attempt_size in range(78, 24, -2):
         title_font = _font(attempt_size, bold=True, serif=True)
-        dummy_d = ImageDraw.Draw(Image.new("RGB",(1,1)))
         total_title_h = sum(
             dummy_d.textbbox((0,0),l,font=title_font)[3] -
             dummy_d.textbbox((0,0),l,font=title_font)[1] + 28
@@ -825,12 +837,12 @@ def _build_frame(t, bg_base, full_bleed, story, theme, particles,
             dummy_d.textbbox((0,0),l,font=title_font)[0] <= inner_w
             for l in title_lines[:4]
         )
-        if fits_w and y + total_title_h < max_y - 120:
+        if fits_w and y + total_title_h <= title_max_y:
             break
     for line in title_lines[:4]:
         bbox=ImageDraw.Draw(frame).textbbox((0,0),line,font=title_font)
         line_h=bbox[3]-bbox[1]; line_top=bbox[1]
-        if y+line_h+10>max_y-120: break
+        if y + line_h + 8 > title_max_y: break
         bright_top=tuple(min(255,c+80) for c in title_color)
         bright_bot=tuple(min(255,c+30) for c in title_color)
         _draw_gradient_text(frame,(inner_x+title_slide,y-line_top),line,
@@ -899,15 +911,16 @@ def _build_frame(t, bg_base, full_bleed, story, theme, particles,
 # HOOK TEXT GENERATOR
 # ═══════════════════════════════════════════════════════════════════════════════
 HOOK_PREFIXES = [
-    "BREAKING:", "JUST IN:", "DID YOU KNOW?", "SHOCKING:",
-    "MUST SEE:", "VIRAL:", "TRENDING NOW:", "ALERT:",
+    "ब्रेकिंग:", "अभी-अभी:", "क्या आप जानते हैं?", "चौंकाने वाला:",
+    "जरूर देखें:", "वायरल:", "ट्रेंडिंग:", "अलर्ट:",
 ]
 
 def _generate_hook(title, category):
-    cat_upper = category.upper().replace("_"," ")
+    # Devanagari has no uppercase — use as-is; replace underscores for display
+    cat_display = category.replace("_", " ")
     stat = _extract_stat(title)
     if stat:
-        return f"{stat} — {cat_upper}"
+        return f"{stat} — {cat_display}"
     prefix = random.choice(HOOK_PREFIXES)
     words = title.split()[:6]
     return f"{prefix}\n{' '.join(words)}…"
@@ -943,7 +956,7 @@ def build_video(story, music_path=None):
     full_summary=story.get("summary","")
     title=story["title"]
 
-    title_lines=textwrap.wrap(title.upper(),width=20)[:4]
+    title_lines=textwrap.wrap(title,width=20)[:4]  # No .upper() — Devanagari has no uppercase
     body_lines=textwrap.wrap(full_summary,width=34)[:8]
     hook_text=_generate_hook(title,category)
     stat_text=_extract_stat(title)

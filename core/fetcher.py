@@ -26,7 +26,7 @@ def fetch_stories(category: str, limit: int = 10, offset: int = 0) -> list:
             "https://api.currentsapi.services/v1/latest-news",
             params={
                 "category": api_category,
-                "language": "en",
+                "language": "hi",          # Changed: "en" → "hi" for Hindi news
                 "apiKey":   API_KEY,
             },
             timeout=15,
