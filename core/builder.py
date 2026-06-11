@@ -126,36 +126,21 @@ FALLBACK_THEMES=[
 # FONTS
 # ═══════════════════════════════════════════════════════════════════════════════
 def _font(size, bold=False, serif=False):
-    if serif:
-        cands=[
-            # Hindi/Devanagari-capable fonts (checked first)
-            FONT_DIR/("NotoSerifDevanagari-Bold.ttf"  if bold else "NotoSerifDevanagari-Regular.ttf"),
-            Path("/usr/share/fonts/truetype/noto/NotoSerifDevanagari-Bold.ttf" if bold
-                 else "/usr/share/fonts/truetype/noto/NotoSerifDevanagari-Regular.ttf"),
-            FONT_DIR/("NotoSerif-Bold.ttf"      if bold else "NotoSerif-Regular.ttf"),
-            FONT_DIR/("PlayfairDisplay-Bold.ttf" if bold else "PlayfairDisplay-Regular.ttf"),
-            Path("/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf" if bold
-                 else "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"),
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf" if bold
-                 else "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"),
-        ]
-    else:
-        cands=[
-            # Hindi/Devanagari-capable fonts (checked first)
-            FONT_DIR/("NotoSansDevanagari-Bold.ttf"  if bold else "NotoSansDevanagari-Regular.ttf"),
-            Path("/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf" if bold
-                 else "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf"),
-            FONT_DIR/("NotoSans-Bold.ttf"   if bold else "NotoSans-Regular.ttf"),
-            FONT_DIR/("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"),
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
-                 else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-            Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold
-                 else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
-        ]
-    cands+=[Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
-                 else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")]
+    """Resolve a Devanagari-capable font. Both serif and sans fall back to
+    NotoSerifDevanagari (the one file we tell users to download)."""
+    # Variable font downloaded as NotoSerifDevanagari-Regular.ttf covers all weights
+    cands = [
+        FONT_DIR/"NotoSerifDevanagari-Bold.ttf",
+        FONT_DIR/"NotoSerifDevanagari-Regular.ttf",
+        FONT_DIR/"NotoSansDevanagari-Bold.ttf",
+        FONT_DIR/"NotoSansDevanagari-Regular.ttf",
+        Path("/usr/share/fonts/truetype/noto/NotoSerifDevanagari-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/noto/NotoSerifDevanagari-Regular.ttf"),
+        Path("/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf"),
+    ]
     for p in cands:
-        if p.exists(): return ImageFont.truetype(str(p),size)
+        if p.exists(): return ImageFont.truetype(str(p), size)
     return ImageFont.load_default()
 
 _FONT_LOGGED = False
@@ -163,12 +148,19 @@ def _log_fonts_once():
     global _FONT_LOGGED
     if _FONT_LOGGED: return
     _FONT_LOGGED = True
-    serif_test = _font(12, bold=True, serif=True)
-    sans_test  = _font(12, bold=True, serif=False)
-    latin_test = _latin_font(12, bold=True)
-    print(f"    [builder] fonts → serif:{getattr(serif_test,'path','default')} "
-          f"| sans:{getattr(sans_test,'path','default')} "
-          f"| latin:{getattr(latin_test,'path','default')}")
+    print(f"    [builder] FONT_DIR = {FONT_DIR}")
+    print(f"    [builder] FONT_DIR exists = {FONT_DIR.exists()}")
+    if FONT_DIR.exists():
+        files = sorted(f.name for f in FONT_DIR.iterdir())
+        print(f"    [builder] font files: {files}")
+    else:
+        print("    [builder] FONT_DIR missing!")
+    def fname(f): return getattr(f, 'path', 'PIL_default')
+    print(f"    [builder] serif bold  -> {fname(_font(12,bold=True, serif=True))}")
+    print(f"    [builder] serif reg   -> {fname(_font(12,bold=False,serif=True))}")
+    print(f"    [builder] sans bold   -> {fname(_font(12,bold=True, serif=False))}")
+    print(f"    [builder] latin bold  -> {fname(_latin_font(12,bold=True))}")
+    print(f"    [builder] latin reg   -> {fname(_latin_font(12,bold=False))}")
 
 def _latin_font(size, bold=False):
     """Font guaranteed to have Latin glyphs — used for all English-only text
@@ -695,11 +687,24 @@ def _draw_channel_banner(frame, cx0, cy0_card, cy1, cx1,
     right_reserve=sub_w_approx+inner_pad_x+24
     text_x=logo_cx+logo_r+20
     text_max_w=bx1-text_x-right_reserve
-    name_font = _latin_font(min(42, max(18, text_max_w // max(1, len(CHANNEL_NAME)))), bold=True)
-    handle_font=_latin_font(28, bold=False)
-    name_h=name_font.size+4; handle_h=handle_font.size+4
-    total_h=name_h+handle_h+8
-    name_y=(by0+by1)//2-total_h//2; handle_y=name_y+name_h+8
+
+    # Size name to fit width, cap at 36 so it never overflows banner height
+    name_font=_latin_font(36, bold=True)
+    _nb=ImageDraw.Draw(frame).textbbox((0,0),CHANNEL_NAME,font=name_font)
+    if _nb[2]-_nb[0] > text_max_w:   # too wide — shrink
+        name_font=_latin_font(28, bold=True)
+    handle_font=_latin_font(24, bold=False)
+
+    # Measure actual rendered heights via bbox (not .size which is point size)
+    _dummy_d=ImageDraw.Draw(Image.new("RGB",(1,1)))
+    _nb2=_dummy_d.textbbox((0,0),CHANNEL_NAME,font=name_font)
+    _hb =_dummy_d.textbbox((0,0),CHANNEL_HANDLE,font=handle_font)
+    name_h=_nb2[3]-_nb2[1]; handle_h=_hb[3]-_hb[1]
+    total_h=name_h+handle_h+6
+    # Vertically centre the text block inside the banner
+    block_top=(by0+by1)//2-total_h//2
+    name_y=block_top-_nb2[1]          # subtract top bearing so glyphs sit at block_top
+    handle_y=block_top+name_h+6-_hb[1]
 
     _draw_gradient_text(frame,(text_x,name_y),CHANNEL_NAME,name_font,
                         (255,255,255),(220,220,220),alpha=alpha)
