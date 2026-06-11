@@ -695,7 +695,7 @@ def _draw_channel_banner(frame, cx0, cy0_card, cy1, cx1,
     right_reserve=sub_w_approx+inner_pad_x+24
     text_x=logo_cx+logo_r+20
     text_max_w=bx1-text_x-right_reserve
-    name_font,_=_fit_font([CHANNEL_NAME],text_max_w,max_size=42,min_size=18,bold=True,serif=False)
+    name_font = _latin_font(min(42, max(18, text_max_w // max(1, len(CHANNEL_NAME)))), bold=True)
     handle_font=_latin_font(28, bold=False)
     name_h=name_font.size+4; handle_h=handle_font.size+4
     total_h=name_h+handle_h+8
@@ -746,7 +746,7 @@ def _draw_cta_pulse(frame, t, accent, show_after=8.0):
     if alpha < 10: return
     pulse = 0.75 + 0.25 * abs(math.sin(t * math.pi * 1.5))
     alpha = int(alpha * pulse)
-    font = _font(38, bold=True, serif=False)   # Devanagari font — handles the Hindi in this string
+    font = _font(38, bold=True, serif=True)   # NotoSerifDevanagari: handles Hindi + basic Latin in CTA text
     text = "↑  रोज़ की ख़बरों के लिए Subscribe करें  ↑"
     dummy = Image.new("RGB",(1,1))
     dd = ImageDraw.Draw(dummy)
@@ -873,7 +873,12 @@ def _build_frame(t, bg_base, full_bleed, story, theme, particles,
 
     # ── Body text (typewriter effect) ──
     body_font=_font(43,bold=False,serif=True)   # serif=True -> NotoSerifDevanagari (confirmed present)
-    chars_per_line=max(20,inner_w//24)
+    # Measure actual average glyph width for this font instead of guessing ÷24
+    # Use a representative Hindi string to get a realistic character width
+    _sample = "कखगघचछजझटठडढतथदधनपफबभमयरलवशषसह"
+    _sbb = ImageDraw.Draw(Image.new("RGB",(1,1))).textbbox((0,0),_sample,font=body_font)
+    _avg_glyph_w = max(1, (_sbb[2]-_sbb[0]) // len(_sample))
+    chars_per_line = max(15, (inner_w - 8) // _avg_glyph_w)  # -8 = small safety margin
     chars_visible = int(max(0, t - T_BODY_IN) * 55)
     body_lines_full=textwrap.wrap(full_summary,width=chars_per_line)[:8]
     chars_drawn=0
