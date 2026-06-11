@@ -158,20 +158,36 @@ def _font(size, bold=False, serif=False):
         if p.exists(): return ImageFont.truetype(str(p),size)
     return ImageFont.load_default()
 
+_FONT_LOGGED = False
+def _log_fonts_once():
+    global _FONT_LOGGED
+    if _FONT_LOGGED: return
+    _FONT_LOGGED = True
+    serif_test = _font(12, bold=True, serif=True)
+    sans_test  = _font(12, bold=True, serif=False)
+    latin_test = _latin_font(12, bold=True)
+    print(f"    [builder] fonts → serif:{getattr(serif_test,'path','default')} "
+          f"| sans:{getattr(sans_test,'path','default')} "
+          f"| latin:{getattr(latin_test,'path','default')}")
+
 def _latin_font(size, bold=False):
     """Font guaranteed to have Latin glyphs — used for all English-only text
-    (channel name, handle, SUBSCRIBE, badge labels, CTA, MIN badges etc.)."""
+    (channel name, handle, SUBSCRIBE, badge labels, CTA, MIN badges etc.).
+    Poppins is bundled in assets/fonts so it always resolves on any OS."""
     cands = [
+        # Bundled fonts — always present regardless of OS
+        FONT_DIR/("Poppins-Bold.ttf"    if bold else "Poppins-Regular.ttf"),
+        FONT_DIR/("Poppins-Medium.ttf"),                      # fallback weight
         FONT_DIR/("NotoSans-Bold.ttf"   if bold else "NotoSans-Regular.ttf"),
         FONT_DIR/("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"),
-        Path("/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf" if bold
-             else "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"),
+        # System fonts — Linux
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
              else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
         Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold
              else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
-        Path("/usr/share/fonts/truetype/freefont/FreeSansBold.ttf" if bold
-             else "/usr/share/fonts/truetype/freefont/FreeSans.ttf"),
+        # System fonts — Windows
+        Path("C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf"),
+        Path("C:/Windows/Fonts/calibrib.ttf" if bold else "C:/Windows/Fonts/calibri.ttf"),
     ]
     for p in cands:
         if p.exists(): return ImageFont.truetype(str(p), size)
@@ -353,7 +369,7 @@ def _build_hook_frame(t, full_bleed, hook_text, accent, particles):
         draw = ImageDraw.Draw(frame)
         ar, ag, ab = accent
         bright = (min(255,ar+100), min(255,ag+100), min(255,ab+100))
-        hook_font_big = _font(90, bold=True, serif=False)
+        hook_font_big = _font(90, bold=True, serif=True)   # serif=True -> NotoSerifDevanagari (confirmed present)
         hook_font_sub = _latin_font(54, bold=False)   # FIX: "Tap for full story" is English
         lines = textwrap.wrap(hook_text, width=16)[:3]  # No .upper() for Devanagari
         dummy = Image.new("RGB",(1,1))
@@ -856,7 +872,7 @@ def _build_frame(t, bg_base, full_bleed, story, theme, particles,
     y+=28
 
     # ── Body text (typewriter effect) ──
-    body_font=_font(43,bold=False,serif=False)
+    body_font=_font(43,bold=False,serif=True)   # serif=True -> NotoSerifDevanagari (confirmed present)
     chars_per_line=max(20,inner_w//24)
     chars_visible = int(max(0, t - T_BODY_IN) * 55)
     body_lines_full=textwrap.wrap(full_summary,width=chars_per_line)[:8]
@@ -923,6 +939,7 @@ def _generate_hook(title, category):
 # ═══════════════════════════════════════════════════════════════════════════════
 def build_video(story, music_path=None):
     print(f"    [builder] assembling video…")
+    _log_fonts_once()
     img_url=story.get("img_url","")
     if not img_url or img_url in ("None",""):
         print("    [builder] no image URL — skipping"); return None
